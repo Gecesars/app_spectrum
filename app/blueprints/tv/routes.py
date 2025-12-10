@@ -1,11 +1,11 @@
-from flask import request, jsonify
+from flask import request, jsonify, current_app
 import sqlalchemy as sa
 from sqlalchemy import func
 
 from app.blueprints.tv import tv_bp
 from app.models import EstacaoTV, Simulacao
 from app import db
-from app.tasks.tv import gerar_contorno_tv
+from app.tasks.tv import gerar_contorno_tv, avaliar_viabilidade_tv
 from app.utils.gis import geom_to_geojson
 from app.utils.propagacao.p526_assis import field_strength_p2p
 
@@ -81,7 +81,10 @@ def listar_estacoes_tv():
 @tv_bp.route("/viabilidade", methods=["POST"])
 def viabilidade_tv():
     """
-    Cria simulação de viabilidade TV (stub) a partir de uma estação existente.
+    Cria simulação de viabilidade TV:
+    - Checa limites de classe (ERP/HNMT).
+    - Gera contorno protegido.
+    - Avalia CI básica contra outras TV.
     Entrada JSON:
     {
       "estacao_id": 123
@@ -99,9 +102,13 @@ def viabilidade_tv():
     db.session.commit()
 
     try:
-        gerar_contorno_tv.delay(sim.id, estacao_id, payload.get("time_percent"), payload.get("path"))
-    except Exception:
-        gerar_contorno_tv.run(sim.id, estacao_id, payload.get("time_percent"), payload.get("path"))
+        avaliar_viabilidade_tv.delay(sim.id, estacao_id, payload.get("time_percent"), payload.get("path"))
+    except Exception as exc:
+        sim.status = "failed"
+        sim.mensagem_status = f"Falha ao enfileirar viabilidade: {exc}"
+        db.session.commit()
+        current_app.logger.exception("Erro ao enfileirar viabilidade TV")
+        return jsonify(error=sim.mensagem_status), 500
 
     return jsonify(id=sim.id, status=sim.status), 202
 

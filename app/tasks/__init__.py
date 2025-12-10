@@ -2,7 +2,7 @@ from celery import shared_task
 from app import db
 from app.models import Simulacao
 from app.tasks.fm import gerar_contorno_fm, avaliar_viabilidade_fm  # noqa: F401
-from app.tasks.tv import gerar_contorno_tv  # noqa: F401
+from app.tasks.tv import gerar_contorno_tv, avaliar_viabilidade_tv  # noqa: F401
 
 
 @shared_task(name="app.tasks.demo.add")

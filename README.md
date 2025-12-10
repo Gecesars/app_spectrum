@@ -32,8 +32,11 @@ Aplicação Flask + PostGIS + Celery que implementa a base para os módulos norm
    - Rode: `docker-compose exec web python -m app.utils.etl.load_tvfm_xml`
    - O ETL trunca e recarrega FM/TV, marcando TV digital via heurística (SBTVD/status) e armazenando diagrama `PadraoAntena_dBd` em `erp_por_radial` (lista de floats).
 6. Carga de setores censitários IBGE:
-   - Coloque `BR_setores_CD2022.*` em `data/`.
-   - Rode: `docker-compose exec web python -m app.utils.etl.load_setores_ibge` (leva alguns minutos; 468k setores).
+  - Coloque `BR_setores_CD2022.*` em `data/`.
+  - Rode: `docker-compose exec web python -m app.utils.etl.load_setores_ibge` (leva alguns minutos; 468k setores).
+  - Distribua a população municipal proporcional à área dos setores (usando Censo 2022 municipal):  
+    `docker-compose exec web python -m app.utils.etl.distribute_pop_municipal`  
+    (usa `data/CD2022_Populacao_Coletada_Imputada_e_Total_Municipio_e_UF_20231222.xlsx`).
 7. Normas:
    - Os DOCX originais estão em `data/normas/` (requisitos técnicos). Para extrair CSVs padronizados, rode `docker-compose exec web python -m app.utils.etl.extract_normas_docx` (gera CSVs em `data/normas/` conforme README).
    - Depois, carregue no banco: `docker-compose exec web python -m app.utils.etl.load_normas`.
@@ -62,6 +65,8 @@ Aplicação Flask + PostGIS + Celery que implementa a base para os módulos norm
 - `docker-compose.yml` — orquestra os serviços web, worker, db, redis, pg_tileserv.
 - `celery_worker.py` — inicialização do worker Celery.
 - `config.py` — configs (dev/prod/test).
+- Rotas úteis:  
+  - `/contornos/<id>/stats` — área (km²) e população estimada pela interseção com setores IBGE (requer `pop_total` preenchido via `distribute_pop_municipal`).
 
 ## Compatibilidade de versão
 - Backend agora pinado para Python 3.13 (`Dockerfile` usa `python:3.13-slim` e `requirements.txt` refletem versões compatíveis). Se rodar localmente com outra versão, alinhe as dependências manualmente ou use o contêiner.
