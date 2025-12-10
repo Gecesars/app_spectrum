@@ -15,7 +15,7 @@ EARTH_RADIUS_M = 6371000.0
 
 
 def _hgt_path(lat: float, lon: float) -> Path:
-    return Path(ensure_tile_loaded(lat, lon, load=False))
+    return Path(ensure_tile_loaded(lat, lon, load=False, download=False))
 
 
 def _read_hgt(path: Path) -> np.ndarray:
@@ -29,6 +29,8 @@ def sample_height(lat: float, lon: float) -> Optional[float]:
     """Retorna altura do terreno (m) via SRTM; None se não conseguir."""
     try:
         path = _hgt_path(lat, lon)
+        if not path.exists():
+            return None
         arr = _read_hgt(path)
         lat_floor = math.floor(lat)  # SW corner latitude
         lon_floor = math.floor(lon)  # SW corner longitude
@@ -88,9 +90,13 @@ def effective_height(lat: float, lon: float, angle_deg: float, hnmt_fallback: fl
     Altura efetiva: altura da estação - média do terreno em 3-15 km no radial.
     Lê altitude do terreno no ponto como sample_height.
     """
-    h0 = sample_height(lat, lon)
-    if h0 is None:
-        raise RuntimeError("Altura no ponto da estação indisponível (SRTM).")
-    h_mean = mean_height_along_radial(lat, lon, angle_deg, dist_start_m=3000, dist_end_m=15000, samples=20)
-    h_eff = h0 - h_mean
-    return h_eff if h_eff > 0 else hnmt_fallback
+    try:
+        h0 = sample_height(lat, lon)
+        if h0 is None:
+            raise RuntimeError("Altura no ponto da estação indisponível (SRTM).")
+        h_mean = mean_height_along_radial(lat, lon, angle_deg, dist_start_m=3000, dist_end_m=15000, samples=20)
+        h_eff = h0 - h_mean
+        return h_eff if h_eff > 0 else hnmt_fallback
+    except Exception:
+        # Fallback para HNMT fornecida ou padrão quando não houver raster disponível.
+        return hnmt_fallback

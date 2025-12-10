@@ -16,6 +16,15 @@ build/
 dist/
 *.egg-info/
 
+*.hgt
+*.tz
+*.hgt.gz
+*.gz
+*.zip
+*.tar.gz
+*.tar
+*.tar.xz    
+
 # VSCode / IDEs
 .vscode/
 .idea/

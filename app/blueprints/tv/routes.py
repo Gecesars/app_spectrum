@@ -1,4 +1,5 @@
 from flask import request, jsonify
+import sqlalchemy as sa
 from sqlalchemy import func
 
 from app.blueprints.tv import tv_bp
@@ -126,8 +127,8 @@ def interferencia_tv():
     if not tx or not rx or not tx.geom or not rx.geom:
         return jsonify(error="Estações inválidas ou sem geometria"), 400
 
-    tx_wkt = db.session.execute(func.ST_AsText(tx.geom)).scalar()
-    rx_wkt = db.session.execute(func.ST_AsText(rx.geom)).scalar()
+    tx_wkt = db.session.scalar(sa.select(func.ST_AsText(tx.geom)))
+    rx_wkt = db.session.scalar(sa.select(func.ST_AsText(rx.geom)))
 
     try:
         campo_dbuvm = field_strength_p2p(
@@ -136,9 +137,7 @@ def interferencia_tv():
             tx_wkt=tx_wkt,
             rx_wkt=rx_wkt,
         )
-        dist_km = db.session.execute(
-            func.ST_DistanceSphere(tx.geom, rx.geom) / 1000.0
-        ).scalar()
+        dist_km = db.session.scalar(sa.select(func.ST_DistanceSphere(tx.geom, rx.geom) / 1000.0))
     except Exception as exc:
         return jsonify(error=f"Erro no cálculo: {exc}"), 500
 

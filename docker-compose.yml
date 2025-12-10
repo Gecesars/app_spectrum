@@ -1,7 +1,7 @@
 services:
   web:
     build: .
-    command: gunicorn -b 0.0.0.0:5000 wsgi:app
+    command: gunicorn --timeout 120 -b 0.0.0.0:5000 wsgi:app
     volumes:
       - .:/app
     environment:
@@ -10,6 +10,8 @@ services:
       FLASK_APP: wsgi.py
       DATABASE_URL: postgresql+psycopg2://postgres:postgres@db:5432/espectro
       REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
     depends_on:
       - db
       - redis

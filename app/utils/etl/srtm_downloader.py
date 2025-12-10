@@ -87,8 +87,8 @@ def load_hgt_postgis(hgt_path: Path, table: str, column: str = "rast"):
     print(f"Carga raster concluída em {table} para {hgt_path.name}")
 
 
-def ensure_tile_loaded(lat: float, lon: float, load: bool = True) -> Path:
-    """Baixa tile se não existir localmente e opcionalmente carrega no PostGIS."""
+def ensure_tile_loaded(lat: float, lon: float, load: bool = True, download: bool = True) -> Path:
+    """Garante caminho do tile. Se download=False, lança exceção se o arquivo não existir."""
     ctx = current_app if current_app else None
     cm = nullcontext() if ctx else create_app().app_context()
     with cm:
@@ -99,6 +99,8 @@ def ensure_tile_loaded(lat: float, lon: float, load: bool = True) -> Path:
         name = tile_name(lat, lon)
         hgt_path = download_dir / f"{name}.hgt"
         if not hgt_path.exists():
+            if not download:
+                raise FileNotFoundError(f"Tile SRTM ausente: {hgt_path}")
             hgt_path = download_tile(base_url, download_dir, name)
         if load:
             load_hgt_postgis(hgt_path, table, column)

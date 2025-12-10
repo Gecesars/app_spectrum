@@ -1,10 +1,12 @@
-from flask import request, jsonify
+from flask import request, jsonify, current_app
+import sqlalchemy as sa
 from sqlalchemy import func
 
 from app.blueprints.fm import fm_bp
 from app.models import EstacaoFM, Simulacao
 from app import db
-from app.tasks.fm import gerar_contorno_fm
+from app.tasks.fm import gerar_contorno_fm, avaliar_viabilidade_fm
+from app import make_celery
 from app.utils.propagacao.p526_assis import field_strength_p2p
 from app.utils.gis import geom_to_geojson
 
@@ -74,7 +76,9 @@ def listar_estacoes():
 @fm_bp.route("/viabilidade", methods=["POST"])
 def viabilidade_fm():
     """
-    Cria simulação de viabilidade FM (stub) a partir de uma estação existente.
+    Cria simulação de viabilidade FM:
+    - Checa limites de classe (ERP/HNMT).
+    - Gera contorno protegido (P.1546 simplificado).
     Entrada JSON:
     {
       "estacao_id": 123
@@ -91,10 +95,25 @@ def viabilidade_fm():
     db.session.add(sim)
     db.session.commit()
 
+    # Sempre enfileira no Celery; se falhar, marca erro em vez de executar inline (evita timeout no worker HTTP).
     try:
-        gerar_contorno_fm.delay(sim.id, estacao_id, payload.get("time_percent"), payload.get("path"))
-    except Exception:
-        gerar_contorno_fm.run(sim.id, estacao_id, payload.get("time_percent"), payload.get("path"))
+        broker = current_app.config.get("CELERY_BROKER_URL")
+        current_app.logger.info(f"Enfileirando viabilidade FM no broker {broker}")
+        # usa a instância global do worker, mas se algo falhar tenta instanciar Celery ad hoc.
+        avaliar_viabilidade_fm.delay(sim.id, estacao_id, payload.get("time_percent"), payload.get("path"))
+    except Exception as exc:
+        current_app.logger.exception("Erro ao enfileirar viabilidade FM com instância padrão; tentando Celery ad hoc")
+        try:
+            celery = make_celery(current_app)
+            celery.send_task(
+                "app.tasks.fm.viabilidade",
+                args=(sim.id, estacao_id, payload.get("time_percent"), payload.get("path")),
+            )
+        except Exception as exc2:
+            sim.status = "failed"
+            sim.mensagem_status = f"Falha ao enfileirar viabilidade: {exc2}"
+            db.session.commit()
+            return jsonify(error=sim.mensagem_status), 500
 
     return jsonify(id=sim.id, status=sim.status), 202
 
@@ -120,8 +139,8 @@ def interferencia_fm():
     if not tx or not rx or not tx.geom or not rx.geom:
         return jsonify(error="Estações inválidas ou sem geometria"), 400
 
-    tx_wkt = db.session.execute(func.ST_AsText(tx.geom)).scalar()
-    rx_wkt = db.session.execute(func.ST_AsText(rx.geom)).scalar()
+    tx_wkt = db.session.scalar(sa.select(func.ST_AsText(tx.geom)))
+    rx_wkt = db.session.scalar(sa.select(func.ST_AsText(rx.geom)))
 
     try:
         campo_dbuvm = field_strength_p2p(
@@ -130,9 +149,7 @@ def interferencia_fm():
             tx_wkt=tx_wkt,
             rx_wkt=rx_wkt,
         )
-        dist_km = db.session.execute(
-            func.ST_DistanceSphere(tx.geom, rx.geom) / 1000.0
-        ).scalar()
+        dist_km = db.session.scalar(sa.select(func.ST_DistanceSphere(tx.geom, rx.geom) / 1000.0))
     except Exception as exc:
         return jsonify(error=f"Erro no cálculo: {exc}"), 500
 
