@@ -2,8 +2,5 @@ from flask import Blueprint
 
 radcom_bp = Blueprint("radcom", __name__)
 
-
-@radcom_bp.route("/ping", methods=["GET"])
-def ping():
-    """Placeholder para módulo RadCom."""
-    return {"service": "radcom", "message": "ok"}, 200
+# Importa rotas
+from app.blueprints.radcom import routes  # noqa: E402,F401

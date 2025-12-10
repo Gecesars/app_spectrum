@@ -77,7 +77,9 @@ def run() -> None:
             "model": NormasFMProtecao,
             "mapper": lambda r: {
                 "tipo_interferencia": r.get("tipo_interferencia"),
-                "delta_f_khz": r.get("delta_f_khz") and int(r.get("delta_f_khz")),
+                "delta_f_khz": (
+                    int(to_float(r.get("delta_f_khz"))) if to_float(r.get("delta_f_khz")) is not None else None
+                ),
                 "ci_requerida_db": to_float(r.get("ci_requerida_db")),
             },
         },

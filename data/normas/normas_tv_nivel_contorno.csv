@@ -1,0 +1,6 @@
+tecnologia,faixa_canal,nivel_campo_dbuv_m
+analogica,vhf_baixo,58.0
+analogica,vhf_alto,64.0
+analogica,uhf,70.0
+digital,vhf_alto,43.0
+digital,uhf,51.0

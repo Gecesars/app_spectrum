@@ -9,6 +9,13 @@ class BaseConfig:
     JSON_SORT_KEYS = False
     PROPAGATION_DEFAULT_SRID = 4674  # SIRGAS 2000
     PROPAGATION_SAMPLE_POINTS = 72  # radiais de 5 em 5°
+    PROPAGATION_RASTER_TABLE = os.getenv("PROPAGATION_RASTER_TABLE", "srtm_raster")
+    PROPAGATION_RASTER_COLUMN = os.getenv("PROPAGATION_RASTER_COLUMN", "rast")
+    # Mapzen/Skadi (Viewfinderpanoramas) tiles em .hgt.gz
+    SRTM_BASE_URL = os.getenv(
+        "SRTM_BASE_URL", "https://s3.amazonaws.com/elevation-tiles-prod/skadi"
+    )
+    SRTM_DOWNLOAD_DIR = os.getenv("SRTM_DOWNLOAD_DIR", "data/srtm")
 
 
 class DevConfig(BaseConfig):
