@@ -12,7 +12,8 @@ from app.models import (
     Simulacao,
 )
 from app.utils.propagacao.p1546_curves import field_strength_p1546
-from app.utils.propagacao.terrain import effective_height, destination_point
+from app.utils.propagacao.terrain import destination_point, effective_height
+from app.utils.propagacao.p526 import field_strength_from_erp_dbuvm, path_loss_p526_db, sample_profile
 
 
 def _erp_kw_por_radial(erp_kw: float, erp_por_radial: list[float] | None, angle: int) -> float:
@@ -167,7 +168,10 @@ def _avaliar_interferencias_tv(est: EstacaoTV, path: str, time_percent: float) -
     nivel_alvo = _nivel_alvo_dbuv(est)
     try:
         base_wkt = db.session.scalar(sa.select(sa.func.ST_AsEWKT(est.geom)))
-        if not base_wkt:
+        base_latlon = db.session.execute(
+            sa.text("SELECT ST_Y(geom) AS lat, ST_X(geom) AS lon FROM estacoes_tv WHERE id=:id"), {"id": est.id}
+        ).fetchone()
+        if not base_wkt or not base_latlon:
             return aprovado, msgs, False
         sql = sa.text(
             """
@@ -190,20 +194,33 @@ def _avaliar_interferencias_tv(est: EstacaoTV, path: str, time_percent: float) -
             if not norma:
                 continue
             ci_req = norma.ci_requerida_db
-            h_eff_intf = effective_height(r.lat, r.lon, 0.0, hnmt_fallback=r.hnmt_m or 30.0)
-            campo_intf = field_strength_p1546(
-                freq_mhz=r.freq_mhz or est.freq_mhz or 600.0,
-                dist_km=r.dist_km or 1.0,
-                h_eff_m=h_eff_intf,
-                time_percent=time_percent if time_percent in (50, 10, 1) else 50,
-                path=path,
-            )
+            try:
+                profile_d, profile_h = sample_profile(r.lat, r.lon, base_latlon.lat, base_latlon.lon, samples=96)
+                h_tx_asl = (profile_h[0] if profile_h else 0.0) + (r.hnmt_m or 30.0)
+                h_rx_asl = (profile_h[-1] if profile_h else 0.0) + 10.0
+                pl_db = path_loss_p526_db(
+                    profile_d,
+                    profile_h,
+                    freq_mhz=r.freq_mhz or est.freq_mhz or 600.0,
+                    h_tx_asl_m=h_tx_asl,
+                    h_rx_asl_m=h_rx_asl,
+                )
+                campo_intf = field_strength_from_erp_dbuvm(r.erp_max_kw or 1.0, pl_db)
+            except Exception:
+                h_eff_intf = effective_height(r.lat, r.lon, 0.0, hnmt_fallback=r.hnmt_m or 30.0)
+                campo_intf = field_strength_p1546(
+                    freq_mhz=r.freq_mhz or est.freq_mhz or 600.0,
+                    dist_km=r.dist_km or 1.0,
+                    h_eff_m=h_eff_intf,
+                    time_percent=time_percent if time_percent in (50, 10, 1) else 50,
+                    path=path,
+                )
             limite = nivel_alvo - ci_req
             if campo_intf > limite:
                 aprovado = False
                 msgs.append(
                     f"Interf TV: est.{r.id} Δcanal={delta} CI_req={ci_req} dB "
-                    f"campo_intf={campo_intf:.1f} dBµV/m > limite {limite:.1f} dBµV/m (dist {r.dist_km:.1f} km)."
+                    f"campo_intf={campo_intf:.1f} dBµV/m > limite {limite:.1f} dBµV/m (dist {r.dist_km:.1f} km, P.526/Assis)."
                 )
         return aprovado, msgs, True
     except Exception as exc:

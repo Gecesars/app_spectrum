@@ -5,6 +5,7 @@ from celery import shared_task
 
 from app import db
 from app.models import EstacaoFM, NormasFMClasses, NormasFMProtecao, ResultadoCobertura, Simulacao
+from app.utils.propagacao.p526 import field_strength_from_erp_dbuvm, path_loss_p526_db, sample_profile
 from app.utils.propagacao.p1546_curves import field_strength_p1546
 from app.utils.propagacao.terrain import effective_height, destination_point
 
@@ -139,7 +140,10 @@ def _avaliar_interferencias(est: EstacaoFM, path: str, time_percent: float) -> t
 
     try:
         base_wkt = db.session.scalar(sa.select(sa.func.ST_AsEWKT(est.geom)))
-        if not base_wkt:
+        base_latlon = db.session.execute(
+            sa.text("SELECT ST_Y(geom) AS lat, ST_X(geom) AS lon FROM estacoes_fm WHERE id=:id"), {"id": est.id}
+        ).fetchone()
+        if not base_wkt or not base_latlon:
             return aprovado, msgs, False
 
         fmin = est.freq_mhz - 0.5
@@ -167,20 +171,33 @@ def _avaliar_interferencias(est: EstacaoFM, path: str, time_percent: float) -> t
             if not norma:
                 continue
             ci_req = norma.ci_requerida_db
-            h_eff_intf = effective_height(r.lat, r.lon, 0.0, hnmt_fallback=r.hnmt_m or 30.0)
-            campo_intf = field_strength_p1546(
-                freq_mhz=r.freq_mhz or est.freq_mhz,
-                dist_km=r.dist_km or 1.0,
-                h_eff_m=h_eff_intf,
-                time_percent=time_percent,
-                path=path,
-            )
+            # Perfil de terreno + P.526/Assis
+            try:
+                profile_d, profile_h = sample_profile(r.lat, r.lon, base_latlon.lat, base_latlon.lon, samples=96)
+                h_tx_ground = profile_h[0]
+                h_rx_ground = profile_h[-1]
+                h_tx_asl = h_tx_ground + (r.hnmt_m or 30.0)
+                h_rx_asl = h_rx_ground + 10.0  # receptor a 10 m sobre o solo
+                pl_db = path_loss_p526_db(
+                    profile_d, profile_h, freq_mhz=r.freq_mhz or est.freq_mhz, h_tx_asl_m=h_tx_asl, h_rx_asl_m=h_rx_asl
+                )
+                campo_intf = field_strength_from_erp_dbuvm(r.erp_max_kw or 1.0, pl_db)
+            except Exception:
+                # fallback: P.1546 tabulado
+                h_eff_intf = effective_height(r.lat, r.lon, 0.0, hnmt_fallback=r.hnmt_m or 30.0)
+                campo_intf = field_strength_p1546(
+                    freq_mhz=r.freq_mhz or est.freq_mhz,
+                    dist_km=r.dist_km or 1.0,
+                    h_eff_m=h_eff_intf,
+                    time_percent=time_percent,
+                    path=path,
+                )
             limite = 66.0 - ci_req
             if campo_intf > limite:
                 aprovado = False
                 msgs.append(
                     f"Interf: est.{r.id} Δf={df_khz:.0f} kHz CI_req={ci_req} dB "
-                    f"campo_intf={campo_intf:.1f} dBµV/m > limite {limite:.1f} dBµV/m (dist {r.dist_km:.1f} km)."
+                    f"campo_intf={campo_intf:.1f} dBµV/m > limite {limite:.1f} dBµV/m (dist {r.dist_km:.1f} km, P.526/Assis)."
                 )
         return aprovado, msgs, True
     except Exception as exc:

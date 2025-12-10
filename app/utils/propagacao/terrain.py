@@ -8,8 +8,12 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 import numpy as np
+import sqlalchemy as sa
 
-from app.utils.etl.srtm_downloader import ensure_tile_loaded, tile_name
+from flask import current_app
+
+from app import db
+from app.utils.etl.srtm_downloader import ensure_tile_loaded
 
 EARTH_RADIUS_M = 6371000.0
 
@@ -25,8 +29,35 @@ def _read_hgt(path: Path) -> np.ndarray:
     return data.reshape((1201, 1201))
 
 
+def _height_from_db(lat: float, lon: float) -> Optional[float]:
+    """Tenta obter altura via raster no PostGIS (tabela configurada)."""
+    try:
+        cfg = current_app.config if current_app else {}
+        table = cfg.get("PROPAGATION_RASTER_TABLE", "srtm_raster")
+        column = cfg.get("PROPAGATION_RASTER_COLUMN", "rast")
+        sql = sa.text(
+            f"""
+            SELECT ST_Value({column}, ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)) AS h
+            FROM {table}
+            WHERE ST_Intersects({column}, ST_SetSRID(ST_MakePoint(:lon, :lat), 4326))
+            LIMIT 1;
+            """
+        )
+        row = db.session.execute(sql, {"lat": lat, "lon": lon}).fetchone()
+        if row and row.h is not None:
+            return float(row.h)
+    except Exception:
+        return None
+    return None
+
+
 def sample_height(lat: float, lon: float) -> Optional[float]:
     """Retorna altura do terreno (m) via SRTM; None se não conseguir."""
+    # 1) tenta PostGIS raster
+    h_db = _height_from_db(lat, lon)
+    if h_db is not None:
+        return h_db
+    # 2) fallback arquivo .hgt local
     try:
         path = _hgt_path(lat, lon)
         if not path.exists():

@@ -43,10 +43,10 @@ def prefetch(load: bool = False, uf: Optional[str] = None) -> Set[str]:
     return tiles
 
 
-def main(load: bool = False):
+def main(load: bool = False, uf: Optional[str] = None):
     app = create_app()
     with app.app_context():
-        prefetch(load=load, uf=args.uf if 'args' in globals() else None)
+        prefetch(load=load, uf=uf)
 
 
 if __name__ == "__main__":
@@ -54,4 +54,4 @@ if __name__ == "__main__":
     parser.add_argument("--load", action="store_true", help="carregar também no PostGIS (raster)")
     parser.add_argument("--uf", type=str, help="filtrar estações por UF para limitar downloads")
     args = parser.parse_args()
-    main(load=args.load)
+    main(load=args.load, uf=args.uf)

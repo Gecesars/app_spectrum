@@ -44,6 +44,7 @@ Aplicação Flask + PostGIS + Celery que implementa a base para os módulos norm
 8. Contornos (P.1546 tabulado):
    - FM/TV usam as curvas oficiais do arquivo `data/Tabulated field strength values P1546.xls` via `app/utils/propagacao/p1546_curves.py`.
    - Endpoints de viabilidade aceitam parâmetros opcionais `time_percent` (50/10/1) e `path` (Land/Sea/Warm Sea/Cold Sea) para ajustar o cálculo.
+   - Interferência FM/TV agora usa um modelo P.526 simplificado com ajuste Assis e perfil de terreno amostrado em SRTM; se o perfil falhar, recai para P.1546 tabulado.
    - Contornos podem ser obtidos em `GET /simulacoes/<id>/contornos` ou `GET /contornos/<id>`.
 9. Raster SRTM (altura efetiva por radial):
   - Fonte default: bucket público Mapzen/Skadi (`https://s3.amazonaws.com/elevation-tiles-prod/skadi`, tiles `.hgt.gz`).

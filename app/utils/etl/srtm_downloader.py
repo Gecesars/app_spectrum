@@ -112,12 +112,12 @@ def main(lat: float, lon: float, load: bool):
     with app.app_context():
         base_url = current_app.config.get("SRTM_BASE_URL")
         download_dir = Path(current_app.config.get("SRTM_DOWNLOAD_DIR", "data/srtm"))
-        table = current_app.config.get("PROPAGATION_RASTER_TABLE", "srtm_raster")
-        column = current_app.config.get("PROPAGATION_RASTER_COLUMN", "rast")
         name = tile_name(lat, lon)
         hgt = download_tile(base_url, download_dir, name)
         if load:
-            raster2pgsql_load(hgt, table, column)
+            table = current_app.config.get("PROPAGATION_RASTER_TABLE", "srtm_raster")
+            column = current_app.config.get("PROPAGATION_RASTER_COLUMN", "rast")
+            load_hgt_postgis(hgt, table, column)
 
 
 if __name__ == "__main__":
