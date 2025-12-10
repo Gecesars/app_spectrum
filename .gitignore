@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+.venv/
+env/
+venv/
+ENV/
+.env
+.env.*
+
+# Packaging
+build/
+dist/
+*.egg-info/
+
+# VSCode / IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+
+# Node / frontend
+node_modules/
+.npm/
+.yarn/
+
+# Databases / data caches
+*.sqlite
+*.db
+*.db-journal
+
+# GIS large files
+*.shp
+*.dbf
+*.shx
+*.prj
+
+# Docker
+.docker-compose.override.yml

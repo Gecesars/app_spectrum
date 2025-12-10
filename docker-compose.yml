@@ -1,0 +1,59 @@
+services:
+  web:
+    build: .
+    command: gunicorn -b 0.0.0.0:5000 wsgi:app
+    volumes:
+      - .:/app
+    environment:
+      FLASK_ENV: development
+      FLASK_DEBUG: "1"
+      FLASK_APP: wsgi.py
+      DATABASE_URL: postgresql+psycopg2://postgres:postgres@db:5432/espectro
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      - db
+      - redis
+    ports:
+      - "5000:5000"
+
+  worker:
+    build: .
+    command: celery -A celery_worker.celery worker --loglevel=info
+    volumes:
+      - .:/app
+    environment:
+      FLASK_ENV: development
+      FLASK_APP: wsgi.py
+      DATABASE_URL: postgresql+psycopg2://postgres:postgres@db:5432/espectro
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      - db
+      - redis
+
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: espectro
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  pg_tileserv:
+    image: pramsey/pg_tileserv:latest
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@db:5432/espectro
+    depends_on:
+      - db
+    ports:
+      - "7800:7800"
+
+volumes:
+  pgdata: {}
